@@ -78,8 +78,6 @@ shinyModule <- function(input, output, session, data) {
   if(st_is_longlat(dataMv2)){dataMv2 <- dataMv2}else{dataMv2 <- st_transform(dataMv2,crs="EPSG:4326")}  ## to not change projection of original data
   dataMv <- moveStack(to_move(dataMv2))
   
-  corrDF_rv <- reactiveVal()
-  
   #################
   ### tab naming ##
   #################
@@ -110,7 +108,7 @@ shinyModule <- function(input, output, session, data) {
   ##############################
   output$TabUI <- renderUI({
     Tabs <- vector("list", ntabs)
-    for(i in 1:ntabs){
+    for(i in 2:ntabs){
       Tabs[[i]] <- tabItem(tabName = tabnames[i],
                            fluidRow( ## make the same as in "population corridors"
                              column(3,sliderInput(inputId=ns(speedPropnames[i]),label="Speed", min=0,max=1, value=0.75, step=0.01),
@@ -119,14 +117,13 @@ shinyModule <- function(input, output, session, data) {
                                     bsTooltip(id=ns(circPropnames[i]), title="Proportion of the circular variances that is low enough to be a valid corridor point. Low values indicate that the segments are (near) parallel (default: variances that are lower than 25 % of all variances)", placement = "bottom", trigger = "hover", options = list(container = "body"))), ## maybe change wording to make it simpler: the lower the value, the more parallel are the segments
                              column(1, numericInput(ns(timeThinnames[i]),"Thin track to X mins", value=0, step=1),
                                     bsTooltip(id=ns(timeThinnames[i]), title="This is specially recommended for high resolution tracks to ease finding regions with parallel segments. Default (=0) no thinning", placement = "bottom", trigger = "hover", options = list(container = "body"))),
-                             column(1, numericInput(ns(clustDistnames[i]),"Cluster width (m)",value=500), #diameter of the cluster, i.e. width of the corridor
-                                    bsTooltip(id=ns(clustDistnames[i]), title="All identified corridor segments that fall within a circle of diameter X will be grouped as a corridor cluster. The 'cluster with' can be seen as the width of the corridor.", placement = "bottom", trigger = "hover", options = list(container = "body"))
+                             column(1, numericInput(ns(clustDistnames[i]),"Cluster radius (m)",value=500), #diameter of the cluster, i.e. width of the corridor
+                                    bsTooltip(id=ns(clustDistnames[i]), title="All identified corridor segments that fall within a circle will be grouped as a corridor cluster", placement = "bottom", trigger = "hover", options = list(container = "body"))
                              ),
                              column(1, numericInput(ns(clustNbnames[i]),"Segment number",value=3), #number of segments that corridor should have within a cluster
                                     bsTooltip(id=ns(clustNbnames[i]), title="Minimum number of segments that will define a cluster. Clusters with fewer segments will be excluded", placement = "bottom", trigger = "hover", options = list(container = "body"))
                              ),
-                             column(2, radioButtons(ns(allorsinglenames[i]),"Segment number", choices=c("Per track", "Across tracks"),selected="Per track"),
-                                    bsTooltip(id=ns(allorsinglenames[i]), title="Select if the minimum number of segments have to be achieved by each track, or if segments of different tracks can be counted within one cluster. If e.g. 'number of segments' is set to 3, with 'per track' only corridors that have at least 3 segments within a track will be shown. If 'across tracks' is selected, also corridors composed of 3 segments of 3 different tracks will be shown.", placement = "bottom", trigger = "hover", options = list(container = "body"))),
+                             column(2, radioButtons(ns(allorsinglenames[i]),"Segment number", choices=c("Per track", "Across tracks"),selected="Per track")),
                              column(1,actionBttn(ns(updateButton[i]), label="Update!", style="fill", color="success",icon=icon("redo"),size="md"))# offset=1,
                            ),
                            withSpinner(leafletOutput(ns(plotnames[i]), height = "85vh"), type=5, size=1.5,color= "#28b78d") ## color the same as update button
@@ -205,7 +202,7 @@ shinyModule <- function(input, output, session, data) {
               options = layersControlOptions(collapsed = FALSE))
         }
         
-        midPts_all <- function(inputTable, d, ns, trks){### calculating clusters to define which segments belong "to the same corridor"
+        midPts_all <- function(inputTable, r, ns, trks){### calculating clusters to define which segments belong "to the same corridor"
           if(trks=="Across tracks"){ #"Per track", "Across tracks" #trks= RVupdate$allorsingle
             ## corridor segment midpoints
             midCrPts <- inputTable[inputTable$burstId=="corridor",c("segMid_x","segMid_y","LocID")]
@@ -217,7 +214,7 @@ shinyModule <- function(input, output, session, data) {
             ## clustering
             hc <- hclust(as.dist(dist), method="single") # complete single
             # define clusters based on a tree "height" cutoff distance (distance between corridor clusters) and add them to the SpDataFrame
-            midCrPts$clusterID <- cutree(hc, h=d/2) # d=RVupdate$clustDist
+            midCrPts$clusterID <- cutree(hc, h=r/2) # r=RVupdate$clustDist
             # add nb of corridor segments per cluster to SpDataFrame
             tbCount <- data.frame(table(midCrPts$clusterID))
             midCrPts$nbCorrInClust <- NA
@@ -226,11 +223,9 @@ shinyModule <- function(input, output, session, data) {
             }
             ## remove those with lesss than X points
             midCrPts <- midCrPts[midCrPts$nbCorrInClust>ns,] #ns=RVupdate$clustNb
-            # midCrPts2 <- do.call("rbind",midCrPts)
-            return(midCrPts) 
           }
           if(trks=="Per track"){ #"Per track", "Across tracks"
-            midPts_L <- lapply(split(inputTable, inputTable$indiv), function(trkTB)tryCatch({
+            midPts_L <- lapply(split(inputTable, inputTable$indiv), function(trkTB){
               ## corridor segment midpoints
               midCrPts <- trkTB[trkTB$burstId=="corridor",c("segMid_x","segMid_y","LocID")]
               midCrPts <- midCrPts[complete.cases(midCrPts),]
@@ -241,7 +236,7 @@ shinyModule <- function(input, output, session, data) {
               ## clustering
               hc <- hclust(as.dist(dist), method="single") # complete single
               # define clusters based on a tree "height" cutoff distance (distance between corridor clusters) and add them to the SpDataFrame
-              midCrPts$clusterID <- cutree(hc, h=d/2) # d=RVupdate$clustDist
+              midCrPts$clusterID <- cutree(hc, h=r/2) # r=RVupdate$clustDist
               # add nb of corridor segments per cluster to SpDataFrame
               tbCount <- data.frame(table(midCrPts$clusterID))
               midCrPts$nbCorrInClust <- NA
@@ -251,16 +246,12 @@ shinyModule <- function(input, output, session, data) {
               ## remove those with lesss than X points
               midCrPts <- midCrPts[midCrPts$nbCorrInClust>ns,] #ns=RVupdate$clustNb
               return(midCrPts)
-            },error=function(e) NULL))
-            midPts_L[sapply(midPts_L, is.null)] <- NULL
-            midPts_L2 <- lapply(midPts_L, function(x){
-              if(nrow(x)==0){NULL}else{x}
             })
-            midPts_L2[sapply(midPts_L2, is.null)] <- NULL
+            midPts_L2 <- lapply(midPts_L, function(x){
+              if(nrow(x)==0){NULL}
+            })
             midCrPts1 <- do.call("rbind",midPts_L2)
-            if(is.null(midCrPts1)){midCrPts <- midPts_L[1]}else{midCrPts <- midPts_L2}
-            midCrPts2 <- do.call("rbind",midCrPts)
-            return(midCrPts2)
+            if(is.null(midCrPts1)){midCrPts <- midPts_L[[1]]}else{midCrPts <- midPts_L2}
           }
         }
         
@@ -278,7 +269,7 @@ shinyModule <- function(input, output, session, data) {
           corrDF_rv(inputTable)
           # corrDFr <- which(indDF$burstId%in%c("corridor")) ## to plot all corridors at once
           
-          ## color palette so clusters can be identified
+          # ## color palette so clusters can be identified
           # selClusterIDs <- unique(indDF$clusterID)[complete.cases(unique(indDF$clusterID))]
           # pal <- colorFactor(
           #   palette = "magma",
@@ -287,10 +278,10 @@ shinyModule <- function(input, output, session, data) {
           
           ind <- unique(inputTable$indiv)
           cols <- rainbow(n=length(ind))
-
+          
           map1 <- leaflet(inputTable) %>% addTiles()%>%
             addProviderTiles("Esri.WorldTopoMap", group = "TopoMap") %>%
-            addProviderTiles("Esri.WorldImagery", group = "Aerial") #%>%
+            addProviderTiles("Esri.WorldImagery", group = "Aerial") #%>% 
           for(x in seq_along(ind)){
             i <- ind[x]
             corrDFInd <- inputTable[inputTable$indiv==i,]
@@ -301,7 +292,7 @@ shinyModule <- function(input, output, session, data) {
               map1 <- map1 %>%
                 addPolylines(data=corrDFInd[n:(n+1),],lng=~long,lat=~lat, color=cols[x],weight = 6,opacity = 0.7, group=paste0("potential corridors-",i))
             }
-
+            
           }
           # for(n in corrDFr){ ## to plot all corridors at once
           #   map1 <- map1 %>%
@@ -324,6 +315,36 @@ shinyModule <- function(input, output, session, data) {
               options = layersControlOptions(collapsed = TRUE)) 
         }
         
+        # corrPlot_all <- function(inputTable){
+        #   ind <- unique(corrDF$indiv)
+        #   cols <- rainbow(n=length(ind))
+        #   map1 <- leaflet(inputTable) %>% addTiles()%>%
+        #     addProviderTiles("Esri.WorldTopoMap", group = "TopoMap") %>%
+        #     addProviderTiles("Esri.WorldImagery", group = "Aerial") #%>% 
+        #   for(x in seq_along(ind)){
+        #     i <- ind[x]
+        #     corrDFInd <- inputTable[inputTable$indiv==i,]
+        #     corrDFr <- which(corrDFInd$burstId%in%c("corridor"))
+        #     map1 <- map1 %>%
+        #       addPolylines(lng = corrDFInd$long,lat = corrDFInd$lat,weight=2, opacity=0.5, layerId=i,group=i, color="black")
+        #     for(n in corrDFr){
+        #       map1 <- map1 %>%
+        #         addPolylines(data=corrDFInd[n:(n+1),],lng=~long,lat=~lat, color=cols[x],weight = 6,opacity = 0.7, group=paste0("potential corridors-",i))
+        #     }
+        #   }
+        #   map1 %>% 
+        #     # addCircles(data=centClust, lng=~x, lat=~y, group=~clusterID, radius=medSegleng*2, color="red") %>%
+        #     addScaleBar(position="bottomright",
+        #                 options=scaleBarOptions(maxWidth = 100, metric = TRUE, imperial = FALSE, updateWhenIdle = TRUE)) %>%
+        #     addLayersControl(
+        #       baseGroups = c("TopoMap","Aerial"),
+        #       # overlayGroups = centClust$clusterID,
+        #       overlayGroups = c(inputTable$indiv,paste0("potential corridors-",inputTable$indiv)),
+        #       options = layersControlOptions(collapsed = FALSE)) 
+        # }
+        
+        
+        
         ################
         ## end plot F ##
         ###############
@@ -333,19 +354,12 @@ shinyModule <- function(input, output, session, data) {
           corrDF_L <- lapply(split(dataMvSubTime), function(y){
             corridorCalc <- corridor(x=y, speedProp=.75, circProp=.25, plot=FALSE)#, minNBsegments = 4)
             # corridorCalc <- corridor(x=dataSubIndTime, speedProp=RVupdate$speedProp, circProp=RVupdate$circProp, plot=FALSE)#, minNBsegments = 2)
-            indDF <- data.frame(long=coordinates(corridorCalc)[,1],
-                                lat=coordinates(corridorCalc)[,2],
-                                burstId=c(as.character(burstId(corridorCalc)),NA),
-                                LocID=corridorCalc$LocID, 
-                                indiv=namesIndiv(corridorCalc),
-                                segMid_x=corridorCalc@data$segMid_x, 
-                                segMid_y=corridorCalc@data$segMid_y)
-            logger.info(paste0(namesIndiv(y),"- corridor calculation done!"))
+            indDF <- data.frame(long=coordinates(corridorCalc)[,1],lat=coordinates(corridorCalc)[,2],burstId=c(as.character(burstId(corridorCalc)),NA),LocID=corridorCalc$LocID, indiv=namesIndiv(corridorCalc),segMid_x=corridorCalc@data$segMid_x, segMid_y=corridorCalc@data$segMid_y)
             return(indDF)
           })
           corrDF <- do.call("rbind",corrDF_L)
           corrYorN <- which(corrDF$burstId%in%c("corridor"))
-          corrDF_rv(corrDF)
+          corrDF_rv <- reactiveVal(corrDF)
           ##################################################
           ### default plot all individuals -- NO corridors ##
           ##################################################
@@ -356,7 +370,7 @@ shinyModule <- function(input, output, session, data) {
             ####################################################
             ### default plot all individuals -- with corridors ##
             ####################################################
-            mP <- midPts_all(isolate(corrDF_rv()),d=500,ns=3,trks="Per track")
+            mP <- midPts_all(isolate(corrDF_rv()),r=500,ns=3,trks="Per track")
             if(length(unique(mP$clusterID))>=1){
               corrPlot_all(isolate(corrDF_rv()),mP)
             }else{
@@ -374,19 +388,12 @@ shinyModule <- function(input, output, session, data) {
           }
           corrDF_L <- lapply(split(dataMvSubTime), function(y){
             corridorCalc <- corridor(x=y, speedProp=RVupdate$speedProp, circProp=RVupdate$circProp, plot=FALSE)#, minNBsegments = 4)
-            indDF <- data.frame(long=coordinates(corridorCalc)[,1],
-                                lat=coordinates(corridorCalc)[,2],
-                                burstId=c(as.character(burstId(corridorCalc)),NA),
-                                LocID=corridorCalc$LocID, 
-                                indiv=namesIndiv(corridorCalc),
-                                segMid_x=corridorCalc@data$segMid_x, 
-                                segMid_y=corridorCalc@data$segMid_y)
-            logger.info(paste0(namesIndiv(y),"- corridor calculation done!"))
+            indDF <- data.frame(long=coordinates(corridorCalc)[,1],lat=coordinates(corridorCalc)[,2],burstId=c(as.character(burstId(corridorCalc)),NA),LocID=corridorCalc$LocID, indiv=namesIndiv(corridorCalc))
             return(indDF)
           })
           corrDF <- do.call("rbind",corrDF_L)
           corrYorN <- which(corrDF$burstId%in%c("corridor"))
-          corrDF_rv(corrDF)
+          corrDF_rv <- reactiveVal(corrDF)
           ##################################################
           ### updated plot all individuals -- NO corridors ##
           ##################################################
@@ -397,7 +404,7 @@ shinyModule <- function(input, output, session, data) {
             ####################################################
             ### updated plot all individuals -- with corridors ##
             ####################################################
-            mP <- midPts_all(isolate(corrDF_rv()),d=RVupdate$clustDist,ns=RVupdate$clustNb,trks=RVupdate$allorsingle)
+            mP <- midPts_all(isolate(corrDF_rv()),r=RVupdate$clustDist,ns=RVupdate$clustNb,trks=RVupdate$allorsingle)
             if(length(unique(mP$clusterID))>=1){
               corrPlot_all(isolate(corrDF_rv()),mP)
             }else{
@@ -407,20 +414,35 @@ shinyModule <- function(input, output, session, data) {
         }
       })
       
-      ## only selected corridos per individual are names in "corridorBehavior" behavior
-      observe({ 
-        selected_groups <- req(input[[paste0(plotnames[i],"_groups")]])
-        selected_groups_sub <- selected_groups[grepl("potential corridors-", selected_groups)]  
-        selIndv <- gsub("potential corridors-", "", selected_groups_sub, perl=TRUE)
-        selIndv <- selIndv[complete.cases(selIndv)]
-        corrDFmod <- corrDF_rv()
-        selLocIDs <- corrDFmod$LocID[corrDFmod$indiv%in%selIndv & corrDFmod$burstId%in%c("corridor")]
-        data$corridorBehavior[data$LocID%in%selLocIDs] <- "corridor"
-        logger.info(paste0("Locations with corridor behavior for the tracks ",paste0(selIndv, collapse=", "), " have been marked as 'corridor' in the column 'corridorBehavior'"))
-        data_out(data)
-      })
+      # observe({ ## THIS OBSERVE DOES NOT WORK!!! as asingle corridors cannot be selected in plot
+      #   selected_groups <- req(input[[paste0(plotnames[i],"_groups")]])
+      #   selClusts <- as.numeric(gsub("potential corridors cl:", "", selected_groups, perl=TRUE))
+      #   selClusts <- selClusts[complete.cases(selClusts)]
+      #   selLocIDs <- corrDF_rv$LocID[corrDF_rv$clusterID%in%selClusts]
+      #   data$corridorBehavior[data$LocID%in%selLocIDs] <- "corridor"
+      #   data_out(data)
+      # })
+    
+    # observe({ 
+    #   selected_groups <- req(input[[paste0(plotnames[i],"_groups")]])
+    #   selClusts <- as.numeric(gsub("potential corridors cl:", "", selected_groups, perl=TRUE))
+    #   selClusts <- selClusts[complete.cases(selClusts)]
+    #   indDFmod <- indDF_rv()
+    #   selLocIDs <- indDFmod$LocID[indDFmod$clusterID%in%selClusts]
+    #   data$corridorBehavior[data$LocID%in%selLocIDs] <- "corridor"
+    #   data_out(data)
+    # })
   }
+  # observeEvent() of button "Save selected corridors" and add these to the output data?
   
+  
+  
+  # data  <- mutate(data, LocID = 1:nrow(data))
+  # data  <- mutate(data, corridorBehavior = NA)
+  # data <- data %>% select(-c(LocID)) ## remember to remove LocID, buhu this one is tricky as th einfo will be needed for the other indivlds, ha..
+  # if(all(is.na(data$corridorBehavior))){ data <- data %>% select(-c(corridorBehavior,LocID))}
+  # if(all(!(data$corridorBehavior))){data$corridorBehavior <- NULL} # there will always be the last NA of track...
+  # data_out <- reactive(data)
   return(data_out)
 }
 

@@ -1,39 +1,52 @@
-# Name of App *(Give your app a short and informative title. Please adhere to our convention of Title Case without hyphens (e.g. My New App))*
+# Corridor Use Behavior - All Tracks
 
 MoveApps
 
-Github repository: *github.com/yourAccount/Name-of-App* *(the link to the repository where the code of the app can be found must be provided)*
+Github repository: github.com/movestore/corridors_alltracks
 
 ## Description
-*Enter here the short description of the App that might also be used when filling out the description when submitting the App to Moveapps. This text is directly presented to Users that look through the list of Apps when compiling Workflows.*
+Identification of corridor use behavior based on movement characteristics of the animal. Tracks are plotted on a single map, settings are applied to all tracks and corridors of single tracks can be selected or unselected.
 
 ## Documentation
-*Enter here a detailed description of your App. What is it intended to be used for. Which steps of analyses are performed and how. Please be explicit about any detail that is important for use and understanding of the App and its outcomes.*
+This App is embedded in an shiny UI, enabling the user to interactively change the parameters. The corridor identification is based on the movement of the animals, corridors are defined as those areas in the track where movement is fast and parallel (see *"LaPoint et al. (2013) Animal Behavior, Cost-based Corridor Models, and Real Corridors. Landscape Ecology.*" for more information). What is considered as fast and parallel is user defined.
+The corridor use behavior is calculated on each track separately. All tracks are displayed together. For the calculation of the corridors the user can define the proportion of speeds which are considered high enough to be a valid corridor point, and the proportion of the circular variance that is low enough to be a valid corridor point. Low values of the circular variance indicate that the segments are (near) parallel. Identifying the corridors might take some playing around with these two values. These settings affect all tracks simultaneously. To give different tracks different settings see the App "Corridor Use Behavior - Per Track".
+
+Interpretation caution: the method sometimes identifies segments as corridors that probably aren't, which mostly consist of only a few segments. With visual inspection it normally is quite straight forward to distinguish in most cases the true corridors, as they consist of a large amount of segments identified as *corridor segments*. 
+
+To help removing wrongly identified corridors, the settings "Cluster width" and "Segment number" can be adjusted. This will define a cluster of a minimum number of corridor segments that are found within a certain diameter. The 'cluster with' can be seen as the width of the corridor.
+
+The method is highly sensitive to the length of the segments (i.e. resolution of the data). If the data have a high fix rate, with many short segments, finding parallel segments will be rather difficult. Therefore it is recommended to thin the track to a lower fix rate to ease finding regions with parallel segments. Experience shows that for many mammal species 15min fix rate seems to work well.
+
+After any setting has been changed, the button "update!" must be clicked to make the change effective.
+
+It is possible to select & unselect corridor corresponding to single tracks by clicking on the menu on the top right corner of the map. Only the locations of the select corridor clusters (`potential corridors - trackID`) get recorded in the added attribute "corridorBehavior" in the output data.
+
+**CAUTION:** Calculations can take long. The higher the number of locations, the longer it takes to calculate. Be patient and the results will be shown when the calculation is done.
+
 
 ### Input data
-*Indicate which type of input data the App requires. Currently only R objects of class `MoveStack` can be used. This will be extend in the future.*
-
-*Example*: MoveStack in Movebank format
+move2_loc
 
 ### Output data
-*Indicate which type of output data the App produces to be passed on to subsequent apps. Currently only R objects of class `MoveStack` can be used. This will be extend in the future. In case the App does not pass on any data (e.g. a shiny visualization app), it can be also indicated here that no output is produced to be used in subsequent apps.*
-
-*Example:* MoveStack in Movebank format
+move2_loc
 
 ### Artefacts
-*If the App creates artefacts (e.g. csv, pdf, jpeg, shapefiles, etc), please list them here and describe each.*
-
-*Example:* `rest_overview.csv`: csv-file with Table of all rest site properties
+none
 
 ### Settings
-*Since our switch to use shiny bookmarks for storing seleted settings made in the UI, it is not possible any more to have settings in MoveApps to set before running the App and opening the UI. Instead a `store settings` button is included in the UI.
+`Speed`: Proportion of speeds which are high enough to be a valid corridor point (default: speeds that are greater than 75 % of all speeds).
 
-`Store settings`: click to store the current settings of the app for future workflow runs
+`Parallelism`: Proportion of the circular variances that is low enough to be a valid corridor point. Low values indicate that the segments are (near) parallel (default: variances that are lower than 25 % of all variances).
 
-### Most common errors
-*Please describe shortly what most common errors of the App can be, how they occur and best ways of solving them.*
+`Thin track to X mins`: This is specially recommended for high resolution tracks to ease finding regions with parallel segments. Default (=0) no thinning.
+
+`Cluster width (m)`: All identified corridor segments that fall within a circle of the given diameter will be grouped as a corridor cluster. These clusters can than be selected or unselected in the menu on the top right corner of the map. Only the locations of the select corridor clusters get recorded in the added attribute "corridorBehavior" in the output data. Default is 500m (adjust value to what best fits the data).
+
+`Segment number`: Minimum number of segments that will define a cluster. Clusters with fewer segments will be excluded. Default is 3.
+
+`Segment number`: options:`Per track` / `Across tracks`. Select if the minimum number of segments have to be achieved by each track, or if segments of different tracks can be counted within one cluster. If e.g. "number of segments" is set to 3, with "per track" only corridors that have at least 3 segments within a track will be shown. If "across tracks" is selected, also corridors composed of 3 segments of 3 different tracks will be shown. 
+
+`Update!`: after changing any setting use this button to update the calculation.
 
 ### Null or error handling
-*Please indicate for each setting as well as the input data which behaviour the App is supposed to show in case of errors or NULL values/input. Please also add notes of possible errors that can happen if UI settings/parameters are improperly set and any other important information that you find the user should be aware of.*
-
-*Example:* **Setting `input$radius`:** If no radius AND no duration are given, the input data set is returned with a warning. If no radius is given (NULL), but a duration is defined then a default radius of 1000m = 1km is set. 
+**Data**: For use in further Apps the input data set is returned with the addition of the column "corridorBehavior". Empty input will give an error.
