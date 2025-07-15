@@ -10,12 +10,10 @@
       {"name": "fresh"},
       {"name": "shinyBS"}, 
       {"name": "lubridate"}, 
-      {"name": "rgeos"},      
       {"name": "stringr"},      
       {"name": "shinyWidgets"},      
       {"name": "shinycssloaders"},      
       {"name": "leaflet"},      
-      {"name": "maptools"},      
       {"name": "circular"},      
       {"name": "sf"},      
       {"name": "dplyr"}

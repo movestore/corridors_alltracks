@@ -10,12 +10,12 @@ library("shinyBS") ## to display message when hovering over input element in UI
 library("lubridate")
 # library("geosphere")
 # library("dismo")
-library("rgeos")
+# library("rgeos") # using gCentroid()
 library("stringr")
 library("shinyWidgets")
 # library("ggsn")
 library("shinycssloaders")
-library("maptools")
+# library("maptools")
 library("circular")
 # 
 # 
@@ -25,7 +25,7 @@ library("leaflet")
 library("dplyr")
 
 ## TODO
-# think about what to to woth the all indivi corr plot...
+## hover of per track/all tracks not working...
 
 ## ToDO
 # - when app to change track id exists, add it to readme
@@ -266,7 +266,10 @@ shinyModule <- function(input, output, session, data) {
           # get the centroid coords for each cluster
           centClust <- data.frame(x=NA,y=NA,clusterID=unique(midCrPts$clusterID))
           for(i in unique(midCrPts$clusterID)){
-            centClust[centClust$clusterID==i,c("x","y")] <- gCentroid(subset(midCrPts, clusterID == i))@coords
+            crds <-  coordinates(subset(midCrPts, clusterID == i))
+            mean_long <- mean(crds[,1])
+            mean_lat <- mean(crds[,2])
+            centClust[centClust$clusterID==i,c("x","y")] <- c(mean_long,mean_lat)
           }
           
           inputTable <- merge(inputTable, midCrPts@data, by="LocID", all.x=T)
